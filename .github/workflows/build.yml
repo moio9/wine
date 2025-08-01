@@ -18,16 +18,20 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            libc6-dev-arm64-cross linux-libc-dev-arm64-cross \
             flex bison git cmake ninja-build
 
-      - name: Configure Wine for ARM64
+      - name: Build Wine tools (x86_64)
+        run: |
+          mkdir build-tools && cd build-tools
+          ../configure --enable-win64
+          make winegcc winebuild wrc -j$(nproc)
+
+      - name: Build ARM64 XInput
         run: |
           mkdir build-arm64 && cd build-arm64
-          ../configure --host=aarch64-linux-gnu --with-x --enable-win64
-
-      - name: Build XInput for ARM64
-        run: |
-          cd build-arm64
+          ../configure --host=aarch64-linux-gnu --with-x --enable-win64 \
+            --with-wine-tools=../build-tools
           make dlls/xinput1_3 -j$(nproc)
 
       - name: Upload ARM64 XInput DLL
