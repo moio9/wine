@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <stdint.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(xinput);
 
@@ -29,7 +30,7 @@ static CRITICAL_SECTION state_lock;
 #define BTN_DPAD_RIGHT XINPUT_GAMEPAD_DPAD_RIGHT
 
 /* Mapări butoane din scriptul Python */
-static const int BUTTON_MAP[11] = {
+static const int BUTTON_MAP[71] = {
     [56] = BTN_A,
     [57] = BTN_B,
     [59] = BTN_Y,
@@ -79,10 +80,11 @@ static int decode_signed(const unsigned char *bytes, int len) {
 /* Procesează o linie din strace */
 static void process_input_line(const char *line) {
     const char *start = strstr(line, "\"\\x");
-    if (!start) return;
 
     unsigned char raw[16] = {0};
     int raw_count = 0;
+
+    if (!start) return;
 
     const char *p = start;
     while (*p && raw_count < 16) {
@@ -146,8 +148,6 @@ static DWORD WINAPI strace_thread(LPVOID arg) {
         WARN("Nu pot porni strace!\n");
         return 0;
     }
-
-    char line[1024];
     while (fgets(line, sizeof(line), pipe)) {
         process_input_line(line);
     }
