@@ -178,40 +178,40 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
 }
 
 
-
 DWORD WINAPI XInputSetState(DWORD index, XINPUT_VIBRATION *vibration) {
-    /* Stub: nu facem nimic pentru vibrare */
     return ERROR_SUCCESS;
 }
 
 DWORD WINAPI XInputGetCapabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES *caps) {
-    /* Stub: nu raportăm capabilități reale */
     if (!caps) return ERROR_BAD_ARGUMENTS;
     memset(caps, 0, sizeof(*caps));
     return ERROR_SUCCESS;
 }
 
 void WINAPI XInputEnable(BOOL enable) {
-    /* Stub: ignorăm enable/disable */
+    /* Ignorat */
 }
 
 DWORD WINAPI XInputGetDSoundAudioDeviceGuids(DWORD index, GUID *render, GUID *capture) {
-    /* Stub: fără audio */
     return ERROR_NOT_SUPPORTED;
 }
 
 DWORD WINAPI XInputGetBatteryInformation(DWORD index, BYTE type, XINPUT_BATTERY_INFORMATION* battery) {
-    /* Stub: fără baterie */
     return ERROR_NOT_SUPPORTED;
 }
 
 DWORD WINAPI XInputGetKeystroke(DWORD index, DWORD reserved, PXINPUT_KEYSTROKE keystroke) {
-    /* Stub: fără input de tip "keystroke" */
     return ERROR_EMPTY;
 }
 
 DWORD WINAPI XInputGetStateEx(DWORD index, XINPUT_STATE *state) {
-    /* Wrapper simplu peste XInputGetState */
     return XInputGetState(index, state);
 }
+
+DWORD WINAPI XInputGetCapabilitiesEx(DWORD unk, DWORD index, DWORD flags, void *caps) {
+    if (!caps) return ERROR_BAD_ARGUMENTS;
+    memset(caps, 0, sizeof(XINPUT_CAPABILITIES));
+    return ERROR_SUCCESS;
+}
+
 
