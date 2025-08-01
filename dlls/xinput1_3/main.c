@@ -1,6 +1,6 @@
 #include "xinput.h"
 #include "wine/debug.h"
-#include <pthread.h>
+#include "windows.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +10,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(xinput);
 
 static XINPUT_STATE controller_state;
-static pthread_mutex_t state_lock = PTHREAD_MUTEX_INITIALIZER;
+static CRITICAL_SECTION state_lock;
 
 /* Butoane XInput */
 #define BTN_A    XINPUT_GAMEPAD_A
@@ -38,7 +38,7 @@ static const int BUTTON_MAP[11] = {
     [63] = BTN_RB,
     [66] = BTN_START,
     [67] = BTN_BACK,
-    [68] = 0,        // HOME (ignorat aici)
+    [68] = 0,        
     [69] = BTN_LS,
     [70] = BTN_RS
 };
@@ -52,7 +52,7 @@ static const int BUTTON_MAP2[12] = {
     [6] = BTN_RB,
     [7] = BTN_START,
     [8] = BTN_BACK,
-    [9] = 0,        // HOME
+    [9] = 0,       
     [10] = BTN_LS,
     [11] = BTN_RS
 };
@@ -78,14 +78,12 @@ static int decode_signed(const unsigned char *bytes, int len) {
 
 /* Procesează o linie din strace */
 static void process_input_line(const char *line) {
-    // Caută pattern "read(..., \"\\x"
     const char *start = strstr(line, "\"\\x");
     if (!start) return;
 
     unsigned char raw[16] = {0};
     int raw_count = 0;
 
-    // Parsează \xNN în bytes
     const char *p = start;
     while (*p && raw_count < 16) {
         if (*p == '\\' && *(p+1) == 'x') {
@@ -95,9 +93,8 @@ static void process_input_line(const char *line) {
         } else p++;
     }
 
-    pthread_mutex_lock(&state_lock);
+    EnterCriticalSection(&state_lock);
 
-    // Tip 0x07 = butoane simple
     if (raw[0] == 0x07) {
         int buttonID = raw[3];
         int pressed = (raw[5] == 0x01);
@@ -107,7 +104,6 @@ static void process_input_line(const char *line) {
         }
     }
 
-    // Tip 0x0F = axe + butoane
     if (raw[0] == 0x0F) {
         int buttonID = raw[2];
         int pressed  = (raw[3] == 0x01);
@@ -120,16 +116,16 @@ static void process_input_line(const char *line) {
             else controller_state.Gamepad.wButtons &= ~BUTTON_MAP2[buttonID];
         }
 
-        if (axisID == 0) { // Stick stânga
+        if (axisID == 0) { 
             controller_state.Gamepad.sThumbLX = axisX;
             controller_state.Gamepad.sThumbLY = axisY;
-        } else if (axisID == 1) { // Stick dreapta
+        } else if (axisID == 1) { 
             controller_state.Gamepad.sThumbRX = axisX;
             controller_state.Gamepad.sThumbRY = axisY;
-        } else if (axisID == 2) { // Trigger-e
+        } else if (axisID == 2) { 
             controller_state.Gamepad.bLeftTrigger = (axisX < 0 ? 0 : (axisX > 255 ? 255 : axisX));
             controller_state.Gamepad.bRightTrigger = (axisY < 0 ? 0 : (axisY > 255 ? 255 : axisY));
-        } else if (axisID < 4) { // D-Pad
+        } else if (axisID < 4) { 
             controller_state.Gamepad.wButtons &= ~(BTN_DPAD_UP|BTN_DPAD_DOWN|BTN_DPAD_LEFT|BTN_DPAD_RIGHT);
             if (axisX == -255) controller_state.Gamepad.wButtons |= BTN_DPAD_LEFT;
             else if (axisX == 255) controller_state.Gamepad.wButtons |= BTN_DPAD_RIGHT;
@@ -138,15 +134,15 @@ static void process_input_line(const char *line) {
         }
     }
 
-    pthread_mutex_unlock(&state_lock);
+    LeaveCriticalSection(&state_lock);
 }
 
 /* Thread pentru rularea strace și parsing */
-static void* strace_thread(void *arg) {
+static DWORD WINAPI strace_thread(LPVOID arg) {
     FILE *pipe = popen("strace -xx -p $(pgrep app_process) -e trace=read -f 2>&1", "r");
     if (!pipe) {
         WARN("Nu pot porni strace!\n");
-        return NULL;
+        return 0;
     }
 
     char line[1024];
@@ -155,16 +151,16 @@ static void* strace_thread(void *arg) {
     }
 
     pclose(pipe);
-    return NULL;
+    return 0;
 }
 
 /* XInput API */
 DWORD WINAPI XInputGetState(DWORD index, XINPUT_STATE *state) {
     if (!state) return ERROR_BAD_ARGUMENTS;
 
-    pthread_mutex_lock(&state_lock);
+    EnterCriticalSection(&state_lock);
     *state = controller_state;
-    pthread_mutex_unlock(&state_lock);
+    LeaveCriticalSection(&state_lock);
 
     return ERROR_SUCCESS;
 }
@@ -173,9 +169,8 @@ DWORD WINAPI XInputGetState(DWORD index, XINPUT_STATE *state) {
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_ATTACH) {
         memset(&controller_state, 0, sizeof(controller_state));
-        pthread_t tid;
-        pthread_create(&tid, NULL, strace_thread, NULL);
-        pthread_detach(tid);
+        InitializeCriticalSection(&state_lock);
+        CreateThread(NULL, 0, strace_thread, NULL, 0, NULL);
     }
     return TRUE;
 }
