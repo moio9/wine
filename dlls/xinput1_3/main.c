@@ -139,7 +139,9 @@ static void process_input_line(const char *line) {
 
 /* Thread pentru rularea strace și parsing */
 static DWORD WINAPI strace_thread(LPVOID arg) {
-    FILE *pipe = popen("strace -xx -p $(pgrep app_process) -e trace=read -f 2>&1", "r");
+    FILE *pipe;
+    char line[1024];
+    pipe = popen("strace -xx -p $(pgrep app_process) -e trace=read -f 2>&1", "r");
     if (!pipe) {
         WARN("Nu pot porni strace!\n");
         return 0;
