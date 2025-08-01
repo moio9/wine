@@ -1,0 +1,46 @@
+name: Build Wine XInput Fork
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        sudo dpkg --add-architecture i386
+        sudo apt update
+        sudo apt install -y \
+          build-essential gcc-multilib g++-multilib \
+          flex bison \
+          libx11-dev:i386 libfreetype6-dev:i386 \
+          libxcursor-dev:i386 libxi-dev:i386 libxrandr-dev:i386 libxext-dev:i386 \
+          libxinerama-dev:i386 libxxf86vm-dev:i386 \
+          libxrender-dev:i386 libxkbcommon-dev:i386 \
+          libsdl2-dev:i386 libudev-dev:i386 \
+          git cmake ninja-build
+
+    - name: Configure Wine (32-bit)
+      run: |
+        mkdir build && cd build
+        ../configure --with-x --enable-win64 --with-sdl
+
+    - name: Build Wine
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Upload XInput DLL
+      uses: actions/upload-artifact@v4
+      with:
+        name: xinput-dll
+        path: build/dlls/xinput1_3/xinput1_3.dll.so
