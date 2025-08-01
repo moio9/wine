@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-
+  
 jobs:
   build-arm64:
     runs-on: ubuntu-22.04
@@ -25,7 +25,7 @@ jobs:
         run: |
           mkdir build-tools && cd build-tools
           ../configure --enable-win64
-          make winegcc winebuild wrc -j$(nproc)
+          make -j$(nproc)     # important: compilează complet tool-urile
 
       - name: Build ARM64 XInput
         run: |
@@ -33,6 +33,13 @@ jobs:
           ../configure --host=aarch64-linux-gnu --with-x --enable-win64 \
             --with-wine-tools=../build-tools
           make dlls/xinput1_3 -j$(nproc)
+
+      - name: Upload ARM64 XInput DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: xinput-arm64
+          path: build-arm64/dlls/xinput1_3/xinput1_3.dll.so
+
 
       - name: Upload ARM64 XInput DLL
         uses: actions/upload-artifact@v4
