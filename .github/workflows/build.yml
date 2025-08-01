@@ -26,7 +26,7 @@ jobs:
           libxcursor-dev:i386 libxi-dev:i386 libxrandr-dev:i386 libxext-dev:i386 \
           libxinerama-dev:i386 libxxf86vm-dev:i386 \
           libxrender-dev:i386 libxkbcommon-dev:i386 \
-          libsdl2-dev:i386 libudev-dev:i386 \
+          libsdl2-dev libsdl2-dev:i386 libudev-dev:i386 \
           git cmake ninja-build
 
     - name: Configure Wine (32-bit)
