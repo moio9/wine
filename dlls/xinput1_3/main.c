@@ -79,31 +79,21 @@ static int decode_signed(const unsigned char *bytes, int len) {
 
 /* Procesează o linie din strace */
 static void process_input_line(const char *line) {
-    const char *start = strstr(line, "\"\\x");
-
+    const char *start;
+    const char *p;
     unsigned char raw[16] = {0};
     int raw_count = 0;
 
+    start = strstr(line, "\"\\x");
     if (!start) return;
+    p = start;
 
-    const char *p = start;
     while (*p && raw_count < 16) {
         if (*p == '\\' && *(p+1) == 'x') {
-            char hex[3] = {p[2], p[3], 0};
+            char hex[3] = {p[2], p[3], 0};  /* <- aici e ok pentru că e o variabilă locală temporară */
             raw[raw_count++] = (unsigned char)hex_to_int(hex);
             p += 4;
         } else p++;
-    }
-
-    EnterCriticalSection(&state_lock);
-
-    if (raw[0] == 0x07) {
-        int buttonID = raw[3];
-        int pressed = (raw[5] == 0x01);
-        if (buttonID < 11 && BUTTON_MAP[buttonID] != 0) {
-            if (pressed) controller_state.Gamepad.wButtons |= BUTTON_MAP[buttonID];
-            else controller_state.Gamepad.wButtons &= ~BUTTON_MAP[buttonID];
-        }
     }
 
     if (raw[0] == 0x0F) {
@@ -208,10 +198,10 @@ DWORD WINAPI XInputGetStateEx(DWORD index, XINPUT_STATE *state) {
     return XInputGetState(index, state);
 }
 
-DWORD WINAPI XInputGetCapabilitiesEx(DWORD unk, DWORD index, DWORD flags, void *caps) {
-    if (!caps) return ERROR_BAD_ARGUMENTS;
-    memset(caps, 0, sizeof(XINPUT_CAPABILITIES));
-    return ERROR_SUCCESS;
+DWORD WINAPI XInputGetCapabilitiesEx(DWORD unk, DWORD index, DWORD flags, XINPUT_CAPABILITIES_EX *caps)
+{
+    return ERROR_NOT_SUPPORTED;
 }
+
 
 
