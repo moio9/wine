@@ -28,13 +28,14 @@ jobs:
               apt install -y software-properties-common wget curl git build-essential flex bison cmake ninja-build ccache \
                              libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
                              python3 python3-pip clang lld && \
+              apt install -y libfreetype6-dev libfreetype6-dev:arm64
               wget https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz && \
               mkdir -p /opt/llvm-mingw && \
               tar -xf llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz -C /opt/llvm-mingw --strip-components=1 && \
               export PATH=/opt/llvm-mingw/bin:\$PATH && \
               mkdir build-tools && cd build-tools && ../configure --enable-win64 && make -j\$(nproc) && cd .. && \
               mkdir build-arm64 && cd build-arm64 && \
-              ../configure --host=aarch64-w64-mingw32 --enable-win64 --with-x --with-wine-tools=../build-tools && \
+              ../configure --without-freetype --host=aarch64-w64-mingw32 --enable-win64 --with-x --with-wine-tools=../build-tools && \
               make dlls/xinput1_3 -j\$(nproc)
             "
 
