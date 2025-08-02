@@ -1,5 +1,4 @@
 name: Build Wine XInput
-
 on:
   push:
     branches:
@@ -14,15 +13,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Set up Docker QEMU (multi-arch)
+      - name: Enable QEMU for multi-arch
         uses: docker/setup-qemu-action@v2
 
-      - name: Pull ARM64 Ubuntu base
-        run: docker pull arm64v8/ubuntu:22.04
-
-      - name: Build in ARM64 container
+      - name: Build in ARM64 Docker container
         run: |
-          docker run --rm --privileged -v $PWD:/src -w /src arm64v8/ubuntu:22.04 bash -c "
+          docker run --rm --platform linux/arm64/v8 -v $PWD:/src -w /src arm64v8/ubuntu:22.04 bash -c "
             apt update && \
             apt install -y gcc g++ make flex bison git cmake ninja-build \
                            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev && \
