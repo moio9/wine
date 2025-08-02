@@ -4,54 +4,32 @@ on:
   push:
     branches:
       - "**"
-  pull_request:
-    branches:
-      - "**"
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
   build-arm64:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Enable ARM64 architecture
+      - name: Set up Docker QEMU (multi-arch)
+        uses: docker/setup-qemu-action@v2
+
+      - name: Pull ARM64 Ubuntu base
+        run: docker pull arm64v8/ubuntu:22.04
+
+      - name: Build in ARM64 container
         run: |
-          sudo dpkg --add-architecture arm64
-          sudo apt update
-
-      - name: Cache Wine build-tools (x86_64)
-        uses: actions/cache@v3
-        with:
-          path: build-tools
-          key: wine-tools-${{ runner.os }}
-
-      - name: Cache Wine build-arm64
-        uses: actions/cache@v3
-        with:
-          path: build-arm64
-          key: wine-build-arm64-${{ runner.os }}
-
-      - name: Install dependencies
-        run: |
-          sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            libc6-dev-arm64-cross linux-libc-dev-arm64-cross \
-            flex bison git cmake ninja-build ccache \
-            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-
-      - name: Build Wine tools (x86_64)
-        run: |
-          mkdir -p build-tools && cd build-tools
-          ../configure --enable-win64
-          make -j$(nproc)
-
-      - name: Build ARM64 XInput
-        run: |
-          mkdir -p build-arm64 && cd build-arm64
-          ../configure --host=aarch64-linux-gnu --enable-win64 --with-x \
-            --with-wine-tools=../build-tools
-          make dlls/xinput1_3 -j$(nproc)
+          docker run --rm --privileged -v $PWD:/src -w /src arm64v8/ubuntu:22.04 bash -c "
+            apt update && \
+            apt install -y gcc g++ make flex bison git cmake ninja-build \
+                           libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev && \
+            mkdir build-tools && cd build-tools && ../configure --enable-win64 && make -j\$(nproc) && \
+            cd .. && mkdir build-arm64 && cd build-arm64 && ../configure --enable-win64 --host=aarch64-linux-gnu --with-x --with-wine-tools=../build-tools && \
+            make dlls/xinput1_3 -j\$(nproc)
+          "
 
       - name: Upload ARM64 XInput DLL
         uses: actions/upload-artifact@v4
