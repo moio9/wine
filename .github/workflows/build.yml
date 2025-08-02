@@ -16,10 +16,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Enable ARM64 architecture
-        run: |
-          sudo dpkg --add-architecture arm64
-          sudo apt update
+
+
+      - name: Cache Wine build-tools (x86_64)
+        uses: actions/cache@v3
+        with:
+          path: build-tools
+          key: wine-tools-${{ runner.os }}
+
+      - name: Cache Wine build-arm64
+        uses: actions/cache@v3
+        with:
+          path: build-arm64
+          key: wine-build-arm64-${{ runner.os }}
 
       - name: Install dependencies
         run: |
