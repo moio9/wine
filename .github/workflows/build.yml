@@ -1,40 +1,76 @@
 name: Build Wine XInput
+
 on:
   push:
+    branches:
+      - "**"
+  pull_request:
     branches:
       - "**"
   workflow_dispatch:
 
 jobs:
   build-arm64:
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Enable QEMU for multi-arch
-        uses: docker/setup-qemu-action@v2
-
-      - name: Build in ARM64 Docker container
+      - name: Enable ARM64 architecture
         run: |
-          docker run --rm --platform linux/arm64/v8 -v $PWD:/src -w /src arm64v8/ubuntu:22.04 bash -c "
-            apt update && \
-            apt install -y build-essential git cmake ninja-build flex bison \
-                           libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-                           clang lld wget unzip && \
-            # Instalare llvm-mingw pentru aarch64-windows
-            wget https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz && \
-            tar -xf llvm-mingw-*.tar.xz && mv llvm-mingw-* /opt/llvm-mingw && \
-            export PATH=/opt/llvm-mingw/bin:$PATH && \
-            which aarch64-w64-mingw32-clang && \
-            mkdir build-tools && cd build-tools && ../configure --enable-win64 && make -j\$(nproc) && \
-            cd .. && mkdir build-arm64 && cd build-arm64 && \
-            ../configure --host=aarch64-linux-gnu --enable-win64 --with-x \
-                         --with-wine-tools=../build-tools \
-                         --with-llvm --without-mingw && \
-            make dlls/xinput1_3 -j\$(nproc)
-          "
+          sudo dpkg --add-architecture arm64
+          sudo apt update
+
+      - name: Cache Wine build-tools (x86_64)
+        uses: actions/cache@v3
+        with:
+          path: build-tools
+          key: wine-tools-${{ runner.os }}
+
+      - name: Cache Wine build-arm64
+        uses: actions/cache@v3
+        with:
+          path: build-arm64
+          key: wine-build-arm64-${{ runner.os }}
+
+      - name: Cache llvm-mingw
+        uses: actions/cache@v3
+        with:
+          path: /opt/llvm-mingw
+          key: llvm-mingw-20240619
+
+      - name: Install dependencies
+        run: |
+          sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            libc6-dev-arm64-cross linux-libc-dev-arm64-cross \
+            flex bison git cmake ninja-build ccache wget xz-utils \
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libx11-dev:arm64 libxext-dev:arm64 libxrandr-dev:arm64 \
+            libxinerama-dev:arm64 libxcursor-dev:arm64 libxi-dev:arm64
+
+      - name: Install llvm-mingw
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          wget https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz
+          sudo mkdir -p /opt/llvm-mingw
+          sudo tar -xf llvm-mingw-*.tar.xz --strip-components=1 -C /opt/llvm-mingw
+          echo "/opt/llvm-mingw/bin" | sudo tee /etc/environment
+
+      - name: Export llvm-mingw to PATH
+        run: echo "/opt/llvm-mingw/bin" >> $GITHUB_PATH
+
+      - name: Build Wine tools (x86_64)
+        run: |
+          mkdir -p build-tools && cd build-tools
+          ../configure --enable-win64
+          make -j$(nproc)
+
+      - name: Build ARM64 XInput
+        run: |
+          mkdir -p build-arm64 && cd build-arm64
+          ../configure --host=aarch64-linux-gnu --enable-win64 --with-x \
+            --with-wine-tools=../build-tools
+          make dlls/xinput1_3 -j$(nproc)
 
       - name: Upload ARM64 XInput DLL
         uses: actions/upload-artifact@v4
