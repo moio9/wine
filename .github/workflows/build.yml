@@ -16,6 +16,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Cache Wine build
+        uses: actions/cache@v3
+        with:
+          path: build
+          key: wine-build-${{ runner.os }}
+          restore-keys: |
+            wine-build-${{ runner.os }}
+
       - name: Install dependencies
         run: |
           sudo apt update
