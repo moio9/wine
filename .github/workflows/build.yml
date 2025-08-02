@@ -20,10 +20,19 @@ jobs:
         run: |
           docker run --rm --platform linux/arm64/v8 -v $PWD:/src -w /src arm64v8/ubuntu:22.04 bash -c "
             apt update && \
-            apt install -y gcc g++ make flex bison git cmake ninja-build \
-                           libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev && \
+            apt install -y build-essential git cmake ninja-build flex bison \
+                           libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+                           clang lld wget unzip && \
+            # Instalare llvm-mingw pentru aarch64-windows
+            wget https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz && \
+            tar -xf llvm-mingw-*.tar.xz && mv llvm-mingw-* /opt/llvm-mingw && \
+            export PATH=/opt/llvm-mingw/bin:$PATH && \
+            which aarch64-w64-mingw32-clang && \
             mkdir build-tools && cd build-tools && ../configure --enable-win64 && make -j\$(nproc) && \
-            cd .. && mkdir build-arm64 && cd build-arm64 && ../configure --enable-win64 --host=aarch64-linux-gnu --with-x --with-wine-tools=../build-tools && \
+            cd .. && mkdir build-arm64 && cd build-arm64 && \
+            ../configure --host=aarch64-linux-gnu --enable-win64 --with-x \
+                         --with-wine-tools=../build-tools \
+                         --with-llvm --without-mingw && \
             make dlls/xinput1_3 -j\$(nproc)
           "
 
