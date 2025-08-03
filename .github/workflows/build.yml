@@ -14,13 +14,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Set up QEMU (pentru ARM64 emulation)
+      - name: Set up QEMU (ARM64 emulation)
         uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Build ARM64 container & compile
+      - name: Cache LLVM-Mingw
+        uses: actions/cache@v3
+        with:
+          path: llvm-mingw
+          key: llvm-mingw-20240619
+
+      - name: Cache Wine Build Tools
+        uses: actions/cache@v3
+        with:
+          path: build-tools
+          key: wine-tools-${{ runner.os }}-${{ hashFiles('**/*') }}
+
+      - name: Cache Full Wine ARM64 Build
+        uses: actions/cache@v3
+        with:
+          path: build-arm64
+          key: wine-arm64-${{ runner.os }}-${{ hashFiles('**/*') }}
+
+      - name: Build ARM64 container & compile (cached)
         run: |
           docker run --rm --platform linux/arm64 \
             -v ${{ github.workspace }}:/src -w /src arm64v8/ubuntu:22.04 bash -c "
@@ -28,17 +46,18 @@ jobs:
               apt install -y software-properties-common wget curl git build-essential flex bison cmake ninja-build ccache \
                              libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
                              libfreetype6-dev python3 python3-pip clang lld pkg-config && \
-              wget https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz && \
-              mkdir -p /opt/llvm-mingw && \
-              tar -xf llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz -C /opt/llvm-mingw --strip-components=1 && \
-              export PATH=/opt/llvm-mingw/bin:\$PATH && \
+              if [ ! -d llvm-mingw ]; then \
+                wget https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz && \
+                mkdir -p llvm-mingw && \
+                tar -xf llvm-mingw-20240619-ucrt-ubuntu-20.04-aarch64.tar.xz -C llvm-mingw --strip-components=1; \
+              fi && \
+              export PATH=/src/llvm-mingw/bin:\$PATH && \
               export CPPFLAGS='-I/usr/include/freetype2' && \
               export LDFLAGS='-lfreetype' && \
-              mkdir build-tools && cd build-tools && ../configure --enable-win64 && make -j\$(nproc) && cd .. && \
-              mkdir build-arm64 && cd build-arm64 && \
-              ../configure --host=aarch64-w64-mingw32 --enable-win64 --with-x --with-wine-tools=../build-tools && \
-              make dlls/xinput1_3 -j\$(nproc)
-            "
+              if [ ! -f build-tools/Makefile ]; then mkdir -p build-tools && cd build-tools && ../configure --enable-win64 && make -j\$(nproc) && cd ..; fi && \
+              if [ ! -f build-arm64/Makefile ]; then mkdir -p build-arm64 && cd build-arm64 && \
+                ../configure --host=aarch64-w64-mingw32 --enable-win64 --with-x --with-wine-tools=../build-tools; fi && \
+              cd build-arm64 && make dlls/xinput1_3 -j\$(nproc)"
 
       - name: Upload ARM64 XInput DLL
         uses: actions/upload-artifact@v4
