@@ -30,18 +30,19 @@ jobs:
         uses: actions/cache@v3
         with:
           path: build-tools
-          key: wine-tools-${{ runner.os }}-${{ hashFiles('**/*') }}
+          key: wine-tools-${{ runner.os }}-${{ hashFiles('dlls/xinput1_3/main.c') }}
 
       - name: Cache Full Wine ARM64 Build
         uses: actions/cache@v3
         with:
           path: build-arm64
-          key: wine-arm64-${{ runner.os }}-${{ hashFiles('**/*') }}
+          key: wine-arm64-${{ runner.os }}-${{ hashFiles('dlls/xinput1_3/main.c') }}
 
       - name: Build ARM64 container & compile (cached)
         run: |
           docker run --rm --platform linux/arm64 \
             -v ${{ github.workspace }}:/src -w /src arm64v8/ubuntu:22.04 bash -c "
+              set -e
               apt update && \
               apt install -y software-properties-common wget curl git build-essential flex bison cmake ninja-build ccache \
                              libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
@@ -54,10 +55,16 @@ jobs:
               export PATH=/src/llvm-mingw/bin:\$PATH && \
               export CPPFLAGS='-I/usr/include/freetype2' && \
               export LDFLAGS='-lfreetype' && \
+              # Build Wine tools (x86_64)
               if [ ! -f build-tools/Makefile ]; then mkdir -p build-tools && cd build-tools && ../configure --enable-win64 && make -j\$(nproc) && cd ..; fi && \
-              if [ ! -f build-arm64/Makefile ]; then mkdir -p build-arm64 && cd build-arm64 && \
-                ../configure --host=aarch64-w64-mingw32 --enable-win64 --with-x --with-wine-tools=../build-tools; fi && \
-              cd build-arm64 && make dlls/xinput1_3 -j\$(nproc)"
+              # Build ARM64 XInput
+              if [ ! -f build-arm64/Makefile ]; then \
+                mkdir -p build-arm64 && cd build-arm64 && \
+                ../configure --host=aarch64-w64-mingw32 --enable-win64 --with-x --with-wine-tools=../build-tools \
+                  CC=aarch64-w64-mingw32-clang CXX=aarch64-w64-mingw32-clang++ AR=llvm-ar RANLIB=llvm-ranlib; \
+              fi && \
+              cd build-arm64 && make dlls/xinput1_3 -j\$(nproc)
+            "
 
       - name: Upload ARM64 XInput DLL
         uses: actions/upload-artifact@v4
