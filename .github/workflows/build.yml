@@ -44,16 +44,13 @@ jobs:
   install-deps-arm64:
     runs-on: ubuntu-22.04
     steps:
-      - name: Install ARM64 Dependencies
-        run: |
-          sudo dpkg --add-architecture arm64
-          sudo apt update
-          sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            libc6-dev-arm64-cross linux-libc-dev-arm64-cross \
-            flex bison cmake ninja-build ccache \
-            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            libx11-dev:arm64 libxext-dev:arm64 libxrandr-dev:arm64 \
-            libxinerama-dev:arm64 libxcursor-dev:arm64 libxi-dev:arm64
+    - name: Install ARM64 Cross Deps
+      run: |
+        sudo apt update
+        sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+          libc6-dev-arm64-cross linux-libc-dev-arm64-cross \
+          flex bison cmake ninja-build ccache \
+          libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
   # ----------------------------
   # 3. Build ARM64 Wine (XInput)
