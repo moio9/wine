@@ -10,60 +10,68 @@ on:
   workflow_dispatch:
 
 jobs:
-  # -------------------
-  # x86_64 Native Build
-  # -------------------
-  build-x86_64:
+  # ----------------------------
+  # 1. Build Wine Tools (x86_64)
+  # ----------------------------
+  build-tools:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Cache Wine x86_64 build
-        uses: actions/cache@v3
-        with:
-          path: build-x86_64
-          key: wine-build-x86_64-${{ runner.os }}-${{ hashFiles('dlls/xinput1_3/main.c') }}
-          restore-keys: |
-            wine-build-x86_64-${{ runner.os }}
-
-      - name: Install dependencies
+      - name: Install deps (tools)
         run: |
           sudo apt update
-          sudo apt install -y build-essential flex bison cmake ninja-build ccache \
-                              libx11-dev libxext-dev libxrandr-dev libxinerama-dev \
-                              libxcursor-dev libxi-dev
+          sudo apt install -y flex bison cmake ninja-build ccache \
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
-      - name: Build Wine (x86_64)
+      - name: Build Wine Tools
         run: |
-          mkdir -p build-tools && cd build-tools
+          mkdir -p build-tools
+          cd build-tools
           ../configure --enable-win64
           make -j$(nproc)
-          cd ..
-          mkdir -p build-x86_64 && cd build-x86_64
-          ../configure --enable-win64 --with-x --with-wine-tools=../build-tools
-          make -j$(nproc)
 
-      - name: Upload full Wine x86_64 build
+      - name: Upload Wine Tools
         uses: actions/upload-artifact@v4
         with:
-          name: wine-x86_64
-          path: build-x86_64
+          name: wine-tools
+          path: build-tools
 
-  # -------------------
-  # ARM64 Cross-build (Docker)
-  # -------------------
+  # ----------------------------
+  # 2. Install ARM64 Dependencies
+  # ----------------------------
+  install-deps-arm64:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install ARM64 Dependencies
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo apt update
+          sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            libc6-dev-arm64-cross linux-libc-dev-arm64-cross \
+            flex bison cmake ninja-build ccache \
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libx11-dev:arm64 libxext-dev:arm64 libxrandr-dev:arm64 \
+            libxinerama-dev:arm64 libxcursor-dev:arm64 libxi-dev:arm64
+
+  # ----------------------------
+  # 3. Build ARM64 Wine (XInput)
+  # ----------------------------
   build-arm64:
     runs-on: ubuntu-22.04
-    needs: build-x86_64
+    needs: [build-tools, install-deps-arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Download Wine Tools
+        uses: actions/download-artifact@v4
+        with:
+          name: wine-tools
+          path: build-tools
 
-      - name: Cache Wine ARM64 build
+      - name: Cache Wine ARM64 Build
         uses: actions/cache@v3
         with:
           path: build-arm64
@@ -71,30 +79,16 @@ jobs:
           restore-keys: |
             wine-build-arm64-${{ runner.os }}
 
-      - name: Build ARM64 in Docker
-        uses: addnab/docker-run-action@v3
-        with:
-          image: arm64v8/ubuntu:22.04
-          options: |
-            --platform linux/arm64
-            -v ${{ github.workspace }}:/src
-          run: |
-            apt-get update
-            apt-get install -y gcc g++ make flex bison cmake ninja-build ccache git \
-                               libx11-dev libxext-dev libxrandr-dev libxinerama-dev \
-                               libxcursor-dev libxi-dev
-            cd /src
-            mkdir -p build-tools && cd build-tools
-            ../configure --enable-win64
-            make -j$(nproc)
-            cd ..
-            mkdir -p build-arm64 && cd build-arm64
-            ../configure --host=aarch64-linux-gnu --with-x --enable-win64 \
-              --with-wine-tools=../build-tools
-            make -j$(nproc)
+      - name: Build Wine ARM64
+        run: |
+          mkdir -p build-arm64
+          cd build-arm64
+          ../configure --host=aarch64-linux-gnu --with-x --enable-win64 \
+            --with-wine-tools=../build-tools
+          make dlls/xinput1_3 -j$(nproc)
 
-      - name: Upload full Wine ARM64 build
+      - name: Upload XInput ARM64 Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wine-arm64
-          path: build-arm64
+          name: xinput-arm64
+          path: build-arm64/dlls/xinput1_3/xinput1_3.dll.so
