@@ -1,4 +1,4 @@
-name: Build Wine XInput Fork
+name: Build Wine XInput
 
 on:
   push:
@@ -67,6 +67,10 @@ jobs:
         with:
           name: wine-tools
           path: build-tools
+      
+      - name: Fix Wine Tools Permissions
+        run: chmod +x build-tools/tools/*
+
 
       - name: Cache Wine ARM64 Build
         uses: actions/cache@v3
@@ -88,4 +92,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xinput-arm64
-          path: build-arm64/dlls/xinput1_3/xinput1_3.dll.so
+          path: build-arm64/
