@@ -42,20 +42,20 @@ jobs:
           cd ..
           mkdir -p build-x86_64 && cd build-x86_64
           ../configure --enable-win64 --with-x --with-wine-tools=../build-tools
-          make dlls/xinput1_3 -j$(nproc)
+          make -j$(nproc)
 
-      - name: Upload x86_64 XInput DLL
+      - name: Upload full Wine x86_64 build
         uses: actions/upload-artifact@v4
         with:
-          name: xinput-x86_64
-          path: build-x86_64/dlls/xinput1_3/xinput1_3.dll.so
+          name: wine-x86_64
+          path: build-x86_64
 
   # -------------------
   # ARM64 Cross-build (Docker)
   # -------------------
   build-arm64:
     runs-on: ubuntu-22.04
-    needs: build-x86_64   # Optional: poate depinde dacă vrei să refolosești tools
+    needs: build-x86_64
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -74,7 +74,7 @@ jobs:
       - name: Build ARM64 in Docker
         uses: addnab/docker-run-action@v3
         with:
-          image: multiarch/ubuntu-core:arm64-jammy
+          image: arm64v8/ubuntu:22.04
           options: |
             --platform linux/arm64
             -v ${{ github.workspace }}:/src
@@ -91,10 +91,10 @@ jobs:
             mkdir -p build-arm64 && cd build-arm64
             ../configure --host=aarch64-linux-gnu --with-x --enable-win64 \
               --with-wine-tools=../build-tools
-            make dlls/xinput1_3 -j$(nproc)
+            make -j$(nproc)
 
-      - name: Upload ARM64 XInput DLL
+      - name: Upload full Wine ARM64 build
         uses: actions/upload-artifact@v4
         with:
-          name: xinput-arm64
-          path: build-arm64/dlls/xinput1_3/xinput1_3.dll.so
+          name: wine-arm64
+          path: build-arm64
