@@ -163,6 +163,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         memset(&controller_state, 0, sizeof(controller_state));
         InitializeCriticalSection(&state_lock);
         CreateThread(NULL, 0, strace_thread, NULL, 0, NULL);
+
+        printf("[DEBUG] DLL-ul XInput personalizat a fost încărcat!\n");
+        fflush(stdout);  // asigură-te că se printează imediat
     }
     return TRUE;
 }
@@ -173,6 +176,9 @@ DWORD WINAPI XInputSetState(DWORD index, XINPUT_VIBRATION *vibration) {
 }
 
 DWORD WINAPI XInputGetCapabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES *caps) {
+    printf("[DEBUG] XInputGetState apelat pentru index: %lu\n", index);
+    fflush(stdout);
+    
     if (!caps) return ERROR_BAD_ARGUMENTS;
     memset(caps, 0, sizeof(*caps));
     return ERROR_SUCCESS;
