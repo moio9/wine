@@ -39,7 +39,7 @@ jobs:
         
         # Now cross-compile for ARM64 using Wine tools
         RUN make distclean
-        RUN ./configure --host=aarch64-linux-gnu --enable-win64 --with-x --with-wine-tools=build64/tools
+        RUN ./configure --host=aarch64-linux-gnu --enable-win64 --with-x --with-wine-tools=build64/tools --without-freetype
         RUN make -j$(nproc)
         
         RUN tar -czf /wine-arm64.tar.gz -C /src/wine build64
