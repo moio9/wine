@@ -1,94 +1,101 @@
-name: Build Wine XInput
+name: Build Wine ARM64 (Simplu)
 
 on:
   push:
     branches:
       - "**"
-  pull_request:
-    branches:
-      - "**"
   workflow_dispatch:
 
 jobs:
-  build-tools:
-    runs-on: ubuntu-22.04
+  build:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-      - name: Cache Wine Tools
-        uses: actions/cache@v3
-        with:
-          path: build-tools
-          key: wine-build-tools-${{ runner.os }}-${{ hashFiles('**/*.c', '**/*.h') }}
-          restore-keys: |
-            wine-build-tools-${{ runner.os }}
+    # ======================
+    # 1. Free disk space
+    # ======================
+    - name: Free disk space
+      run: |
+        sudo swapoff -a || true
+        sudo rm -f /swapfile || true
+        sudo apt clean
+        df -h
 
-      - name: Install deps (tools)
-        run: |
-          sudo apt update
-          sudo apt install -y flex bison cmake ninja-build ccache \
-            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+    # ======================
+    # 2. Build Foundation Docker Image
+    # ======================
+    - name: Cache Docker image
+      id: cache-foundation
+      uses: actions/cache@v4
+      with:
+        path: foundation.tgz
+        key: foundation-ubuntu2204-${{ hashFiles('.packaging/ubuntu2204/Dockerfile') }}
+        lookup-only: true
 
-      - name: Build Wine Tools
-        run: |
-          mkdir -p build-tools
-          cd build-tools
-          ../configure --enable-win64
-          make -j$(nproc)
+    - name: Build foundation image
+      if: ${{ steps.cache-foundation.outputs.cache-hit != 'true' }}
+      run: |
+        cp .packaging/ubuntu2204/Dockerfile .
+        docker build -t foundationubuntu2204 .
+        docker image save foundationubuntu2204 | gzip -c > foundation.tgz
 
-      - name: Upload Wine Tools
-        uses: actions/upload-artifact@v4
-        with:
-          name: wine-tools
-          path: build-tools
+    - name: Upload Foundation Image
+      if: ${{ steps.cache-foundation.outputs.cache-hit != 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: foundation-image
+        path: foundation.tgz
 
-  install-deps-arm64:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Install ARM64 Cross Deps
-        run: |
-          sudo apt update
-          sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            libc6-dev-arm64-cross linux-libc-dev-arm64-cross \
-            flex bison cmake ninja-build ccache \
-            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+    - name: Load Docker image
+      if: ${{ steps.cache-foundation.outputs.cache-hit == 'true' }}
+      run: docker image load -i foundation.tgz
 
-  build-arm64:
-    runs-on: ubuntu-22.04
-    needs: [build-tools, install-deps-arm64]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    # ======================
+    # 3. Build Wine ARM64
+    # ======================
+    - name: Build Wine ARM64
+      run: |
+        git submodule update --init --recursive wine
+        cp -r .packaging/ubuntu2204/wine/* wine
+        docker build -t wine-arm64 wine
+        docker run --rm wine-arm64 cat /opt/hangover-wine_arm64.deb > wine_arm64.deb
 
-      - name: Download Wine Tools
-        uses: actions/download-artifact@v4
-        with:
-          name: wine-tools
-          path: build-tools
+    - name: Upload Wine Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wine-arm64
+        path: wine_arm64.deb
 
-      - name: Fix Wine Tools Permissions
-        run: |
-          chmod -R +x build-tools/tools
-          chmod -R +x build-tools/programs
-            
-      - name: Cache Wine ARM64 Build
-        uses: actions/cache@v3
-        with:
-          path: build-arm64
-          key: wine-build-arm64-${{ runner.os }}-${{ hashFiles('**/*.c', '**/*.h') }}
-          restore-keys: |
-            wine-build-arm64-${{ runner.os }}
+    # ======================
+    # 4. Build DXVK (ARM64)
+    # ======================
+    - name: Checkout DXVK
+      uses: actions/checkout@v4
+      with:
+        repository: doitsujin/dxvk
+        fetch-depth: 1
+        path: dxvk
 
-      - name: Build Wine ARM64
-        run: |
-          mkdir -p build-arm64
-          cd build-arm64
-          ../configure --host=aarch64-linux-gnu --enable-win64 --with-x --with-wine-tools=../build-tools --disable-tests
-          make -j$(nproc)
+    - name: Build DXVK
+      run: |
+        docker build -t dxvk-arm64 dxvk
+        docker run --rm dxvk-arm64 cat /opt/dxvk/output/dxvk.tar.gz > dxvk.tar.gz
 
-      - name: Upload Full ARM64 Build
-        uses: actions/upload-artifact@v4
-        with:
-          name: wine-arm64-full
-          path: build-arm64/
+    - name: Upload DXVK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dxvk-arm64
+        path: dxvk.tar.gz
+
+    # ======================
+    # 5. Bundle All
+    # ======================
+    - name: Bundle Wine + DXVK
+      run: tar -cf hangover_bundle_arm64.tar wine_arm64.deb dxvk.tar.gz
+
+    - name: Upload Final Bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: hangover-bundle-arm64
+        path: hangover_bundle_arm64.tar
