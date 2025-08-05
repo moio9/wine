@@ -34,7 +34,7 @@ jobs:
         WORKDIR /src/wine
         
         # Build Wine tools for build host
-        RUN ./configure --enable-win64 --with-x
+        RUN ./configure --enable-win64 --with-x --without-freetype
         RUN make -j$(nproc) tools
         
         # Now cross-compile for ARM64 using Wine tools
