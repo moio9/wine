@@ -1,4 +1,4 @@
-name: Build Wine ARM64 (Simplu)
+name: Build Wine ARM64
 
 on:
   push:
@@ -12,9 +12,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    # ======================
-    # 1. Free disk space
-    # ======================
     - name: Free disk space
       run: |
         sudo swapoff -a || true
@@ -22,80 +19,40 @@ jobs:
         sudo apt clean
         df -h
 
-    # ======================
-    # 2. Build Foundation Docker Image
-    # ======================
-    - name: Cache Docker image
-      id: cache-foundation
-      uses: actions/cache@v4
-      with:
-        path: foundation.tgz
-        key: foundation-ubuntu2204-${{ hashFiles('.packaging/ubuntu2204/Dockerfile') }}
-        lookup-only: true
-
-    - name: Build foundation image
-      if: ${{ steps.cache-foundation.outputs.cache-hit != 'true' }}
+    - name: Build Wine in Docker
       run: |
-        cp .packaging/ubuntu2204/Dockerfile .
-        docker build -t foundationubuntu2204 .
-        docker image save foundationubuntu2204 | gzip -c > foundation.tgz
+        cat > Dockerfile <<'EOF'
+        FROM ubuntu:22.04
 
-    - name: Upload Foundation Image
-      if: ${{ steps.cache-foundation.outputs.cache-hit != 'true' }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: foundation-image
-        path: foundation.tgz
+        # Install build dependencies
+        RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential gcc g++ cmake ninja-build flex bison \
+            python3 python3-distutils python3-setuptools \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            git wget tar pkg-config
 
-    - name: Load Docker image
-      if: ${{ steps.cache-foundation.outputs.cache-hit == 'true' }}
-      run: docker image load -i foundation.tgz
+        # Clone Wine source
+        WORKDIR /src
+        RUN git clone https://gitlab.winehq.org/wine/wine.git --depth 1
+        WORKDIR /src/wine
 
-    # ======================
-    # 3. Build Wine ARM64
-    # ======================
-    - name: Build Wine ARM64
-      run: |
-        git submodule update --init --recursive wine
-        cp -r .packaging/ubuntu2204/wine/* wine
-        docker build -t wine-arm64 wine
-        docker run --rm wine-arm64 cat /opt/hangover-wine_arm64.deb > wine_arm64.deb
+        # Configure build (ARM64)
+        RUN ./configure --host=aarch64-linux-gnu --enable-win64 --with-x
+
+        # Compile Wine
+        RUN make -j$(nproc)
+
+        # Package Wine build into a tarball
+        RUN tar -czf /wine-arm64.tar.gz -C /src/wine build64
+        EOF
+
+        # Build Docker image and extract Wine
+        docker build -t wine-arm64 .
+        docker run --rm wine-arm64 cat /wine-arm64.tar.gz > wine-arm64.tar.gz
 
     - name: Upload Wine Artifact
       uses: actions/upload-artifact@v4
       with:
         name: wine-arm64
-        path: wine_arm64.deb
-
-    # ======================
-    # 4. Build DXVK (ARM64)
-    # ======================
-    - name: Checkout DXVK
-      uses: actions/checkout@v4
-      with:
-        repository: doitsujin/dxvk
-        fetch-depth: 1
-        path: dxvk
-
-    - name: Build DXVK
-      run: |
-        docker build -t dxvk-arm64 dxvk
-        docker run --rm dxvk-arm64 cat /opt/dxvk/output/dxvk.tar.gz > dxvk.tar.gz
-
-    - name: Upload DXVK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: dxvk-arm64
-        path: dxvk.tar.gz
-
-    # ======================
-    # 5. Bundle All
-    # ======================
-    - name: Bundle Wine + DXVK
-      run: tar -cf hangover_bundle_arm64.tar wine_arm64.deb dxvk.tar.gz
-
-    - name: Upload Final Bundle
-      uses: actions/upload-artifact@v4
-      with:
-        name: hangover-bundle-arm64
-        path: hangover_bundle_arm64.tar
+        path: wine-arm64.tar.gz
