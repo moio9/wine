@@ -68,8 +68,10 @@ jobs:
           path: build-tools
 
       - name: Fix Wine Tools Permissions
-        run: chmod +x build-tools/tools/*
-
+        run: |
+          chmod -R +x build-tools/tools
+          chmod -R +x build-tools/programs
+            
       - name: Cache Wine ARM64 Build
         uses: actions/cache@v3
         with:
