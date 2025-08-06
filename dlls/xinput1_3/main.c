@@ -90,6 +90,7 @@ static void process_input_line(const char *line) {
 
     while (*p && raw_count < 16) {
         if (*p == '\\' && *(p+1) == 'x') {
+            TRACE("Procesare in bucla!\n");
             char hex[3] = {p[2], p[3], 0};  /* <- aici e ok pentru că e o variabilă locală temporară */
             raw[raw_count++] = (unsigned char)hex_to_int(hex);
             p += 4;
@@ -97,6 +98,7 @@ static void process_input_line(const char *line) {
     }
 
     if (raw[0] == 0x0F) {
+        TRACE("Citire butoane!\n");
         int buttonID = raw[2];
         int pressed  = (raw[3] == 0x01);
         int axisX    = decode_signed(&raw[4], 2);
