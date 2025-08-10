@@ -90,7 +90,7 @@ static void process_input_line(const char *line) {
 
     while (*p && raw_count < 16) {
         if (*p == '\\' && *(p+1) == 'x') {
-            TRACE("Procesare in bucla!\n");
+            TRACE("Procesare in bucla! Hex: %c%c\n", p[2], p[3]);
             char hex[3] = {p[2], p[3], 0};  /* <- aici e ok pentru că e o variabilă locală temporară */
             raw[raw_count++] = (unsigned char)hex_to_int(hex);
             p += 4;
@@ -98,7 +98,8 @@ static void process_input_line(const char *line) {
     }
 
     if (raw[0] == 0x0F) {
-        TRACE("Citire butoane!\n");
+        TRACE("Citire butoane! Raw: %02X %02X %02X %02X\n", raw[0], raw[1], raw[2], raw[3]);
+        
         int buttonID = raw[2];
         int pressed  = (raw[3] == 0x01);
         int axisX    = decode_signed(&raw[4], 2);
@@ -106,20 +107,29 @@ static void process_input_line(const char *line) {
         int axisID   = raw[8];
 
         if (buttonID < 12 && BUTTON_MAP2[buttonID] != 0) {
-            if (pressed) controller_state.Gamepad.wButtons |= BUTTON_MAP2[buttonID];
-            else controller_state.Gamepad.wButtons &= ~BUTTON_MAP2[buttonID];
+            if (pressed) {
+                TRACE("Apasat butonul: %d\n", buttonID);
+                controller_state.Gamepad.wButtons |= BUTTON_MAP2[buttonID];
+            } else {
+                TRACE("Liberat butonul: %d\n", buttonID);
+                controller_state.Gamepad.wButtons &= ~BUTTON_MAP2[buttonID];
+            }
         }
 
         if (axisID == 0) { 
+            TRACE("Mișcare axa stângă: X=%d Y=%d\n", axisX, axisY);
             controller_state.Gamepad.sThumbLX = axisX;
             controller_state.Gamepad.sThumbLY = axisY;
         } else if (axisID == 1) { 
+            TRACE("Mișcare axa dreaptă: X=%d Y=%d\n", axisX, axisY);
             controller_state.Gamepad.sThumbRX = axisX;
             controller_state.Gamepad.sThumbRY = axisY;
         } else if (axisID == 2) { 
+            TRACE("Mișcare trăgaciuri: L=%d R=%d\n", axisX, axisY);
             controller_state.Gamepad.bLeftTrigger = (axisX < 0 ? 0 : (axisX > 255 ? 255 : axisX));
             controller_state.Gamepad.bRightTrigger = (axisY < 0 ? 0 : (axisY > 255 ? 255 : axisY));
         } else if (axisID < 4) { 
+            TRACE("Mișcare D-PAD: X=%d Y=%d\n", axisX, axisY);
             controller_state.Gamepad.wButtons &= ~(BTN_DPAD_UP|BTN_DPAD_DOWN|BTN_DPAD_LEFT|BTN_DPAD_RIGHT);
             if (axisX == -255) controller_state.Gamepad.wButtons |= BTN_DPAD_LEFT;
             else if (axisX == 255) controller_state.Gamepad.wButtons |= BTN_DPAD_RIGHT;
