@@ -33,32 +33,30 @@ jobs:
       run: |
         cat > Dockerfile <<'EOF'
         FROM ubuntu:22.04
-        
-        # Install build dependencies
+
+        # Instalează dependențele necesare
         RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
             build-essential gcc g++ cmake ninja-build flex bison \
             python3 python3-distutils python3-setuptools \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
             git wget tar pkg-config
-
+        
         WORKDIR /src
         RUN git clone https://gitlab.winehq.org/wine/wine.git --depth 1
-
-        # Build Wine tools for build host
+        
         WORKDIR /src/wine
-        RUN ./configure --enable-win64 --without-freetype
-        RUN make -j$(nproc) tools
-
-        # Now cross-compile for ARM64 using Wine tools
-        RUN make distclean
-        RUN ./configure --host=aarch64-linux-gnu --enable-win64 --without-freetype
-        RUN make -j$(nproc) tools
-        RUN ./configure --host=aarch64-linux-gnu --enable-win64 --with-x --without-freetype
-        RUN make -j$(nproc)
-
-        # Create tarball for ARM64 build
-        RUN tar -czf /wine-arm64.tar.gz -C /src/wine build64
+        # Configurează Wine pentru a compila doar XInput
+        RUN ./configure --without-x --without-freetype --without-fontconfig --without-pcap --without-gstreamer --without-alsa --without-esd --without-cups --without-xinerama --without-opengl --enable-win64
+        
+        # Compilăm doar XInput
+        RUN make dlls/xinput1_3
+        
+        # Salvează fișierul compilat
+        RUN tar -czf /xinput.tar.gz -C /src/wine dlls/xinput1_3.dll.so
+        
+        # Rulează comanda de final
+        RUN echo "XInput compilat cu succes!"
 
         EOF
 
