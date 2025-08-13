@@ -1,5 +1,5 @@
 TESTDLL   = xinput1_3.dll
-IMPORTS   = user32 hid setupapi
+IMPORTS   = user32 hid setupapi ws2_32
 
 SOURCES = \
 	xinput.c
