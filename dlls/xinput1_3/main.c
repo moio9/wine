@@ -208,7 +208,7 @@ static void send_hello(void)
     buffer[2] = 0; /* ver_minor */
 
     client_addr.sin_family = AF_INET;
-    client_addr.sin_addr.s_addr = inet_addr(cfg_bind_ip);
+    client_addr.sin_addr.s_addr = inet_addr(cfg_peer_ip);
     client_addr.sin_port = htons(cfg_client_port);
 
     sendto(server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
@@ -223,7 +223,7 @@ static void get_gamepad_request(void)
     memset(&client_addr, 0, sizeof(client_addr));
 
     client_addr.sin_family = AF_INET;
-    client_addr.sin_addr.s_addr = inet_addr(cfg_bind_ip);
+    client_addr.sin_addr.s_addr = inet_addr(cfg_peer_ip);
     client_addr.sin_port = htons(cfg_client_port);
 
     buffer[0] = REQUEST_CODE_GET_GAMEPAD;
@@ -242,7 +242,7 @@ static void release_gamepad_request(void)
     memset(&client_addr, 0, sizeof(client_addr));
 
     client_addr.sin_family = AF_INET;
-    client_addr.sin_addr.s_addr = inet_addr(cfg_bind_ip);
+    client_addr.sin_addr.s_addr = inet_addr(cfg_peer_ip);
     client_addr.sin_port = htons(cfg_client_port);
 
     buffer[0] = REQUEST_CODE_RELEASE_GAMEPAD;
@@ -463,39 +463,34 @@ static DWORD WINAPI controller_read_thread_proc(void *param) {
             continue;
         }
         
-        if (buffer[0] == REQUEST_CODE_GET_GAMEPAD) 
-        {
-            int gamepad_id;
-            gamepad_id = *(int*)(buffer + 1);
-            input_type = buffer[5];
-            
-            EnterCriticalSection(&controller.crit);
-            if (input_type & FLAG_INPUT_TYPE_XINPUT)
-            {
-                if (gamepad_id > 0) 
-                {
-                    controller.id = gamepad_id;
-                    if (!controller.connected) controller_init();
-                }
-                else if (gamepad_id == 0) 
-                {
-                    controller.id = 0;
-                    controller.connected = FALSE;       
-                }
-            }
-            else
-            {
-                controller.id = 0;
-                controller.connected = FALSE;  
-            }
-            LeaveCriticalSection(&controller.crit);
-            
-            if (!started) 
-            {
-                started = TRUE;
-                SetEvent(start_event);    
-            }
-        }
+        if (buffer[0] == REQUEST_CODE_GET_GAMEPAD && res >= 7)
+	{
+	    int gamepad_id = *(int*)(buffer + 2);  /* ✅ id la [2..5] LE */
+	    input_type = buffer[6];                 /* ✅ flags la [6] */
+
+	    EnterCriticalSection(&controller.crit);
+	    if (input_type & FLAG_INPUT_TYPE_XINPUT)
+	    {
+		if (gamepad_id > 0)
+		{
+		    controller.id = gamepad_id;
+		    if (!controller.connected) controller_init();
+		}
+		else /* id == 0 => deconectat */
+		{
+		    controller.id = 0;
+		    controller.connected = FALSE;
+		}
+	    }
+	    else
+	    {
+		controller.id = 0;
+		controller.connected = FALSE;
+	    }
+	    LeaveCriticalSection(&controller.crit);
+
+	    if (!started) { started = TRUE; SetEvent(start_event); }
+	}
         else if (buffer[0] == REQUEST_CODE_GET_GAMEPAD_STATE && controller.connected)
         {
             controller_update_state(buffer);
