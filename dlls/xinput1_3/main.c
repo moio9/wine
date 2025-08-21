@@ -75,6 +75,7 @@
 #define IDX_BUTTON_START 7
 #define IDX_BUTTON_L3 8
 #define IDX_BUTTON_R3 9
+#define IDX_BUTTON_HOME 12
 
 static char input_type = 0;
 
@@ -361,25 +362,25 @@ static void controller_update_state(char *buffer)
     thumb_ry = *(short*)(buffer + 15);
 
     state->Gamepad.wButtons = 0;
-    for (i = 0; i < 10; i++)
-    {    
-        if ((buttons & (1<<i))) {
-            switch (i)
-            {
-            case IDX_BUTTON_A: state->Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
-            case IDX_BUTTON_B: state->Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
-            case IDX_BUTTON_X: state->Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
-            case IDX_BUTTON_Y: state->Gamepad.wButtons |= XINPUT_GAMEPAD_Y; break;
-            case IDX_BUTTON_L1: state->Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
-            case IDX_BUTTON_R1: state->Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
-            case IDX_BUTTON_SELECT: state->Gamepad.wButtons |= XINPUT_GAMEPAD_BACK; break;
-            case IDX_BUTTON_START: state->Gamepad.wButtons |= XINPUT_GAMEPAD_START; break;
-            case IDX_BUTTON_L3: state->Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
-            case IDX_BUTTON_R3: state->Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
-            }
-        }
-    }
-    
+    static const unsigned char map10[11] = {0,1,2,3,4,5,7,6,8,9,10}; /* 6<->7 */
+    for (i = 0; i < 11; i++) {
+	    unsigned j = map10[i];
+	    if (buttons & (1u << i)) {
+		switch (j) {
+		case IDX_BUTTON_A:      state->Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
+		case IDX_BUTTON_B:      state->Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
+		case IDX_BUTTON_X:      state->Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
+		case IDX_BUTTON_Y:      state->Gamepad.wButtons |= XINPUT_GAMEPAD_Y; break;
+		case IDX_BUTTON_L1:     state->Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
+		case IDX_BUTTON_R1:     state->Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
+		case IDX_BUTTON_START: state->Gamepad.wButtons |= XINPUT_GAMEPAD_START;  break;
+		case IDX_BUTTON_SELECT:  state->Gamepad.wButtons |= XINPUT_GAMEPAD_BACK; break;
+		case IDX_BUTTON_L3:     state->Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
+		case IDX_BUTTON_R3:     state->Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
+		case IDX_BUTTON_HOME:     state->Gamepad.wButtons |= XINPUT_GAMEPAD_GUIDE; break;
+		}
+	    }
+	}
     //state->Gamepad.bLeftTrigger = (buttons & (1<<10)) ? 255 : 0;
     //state->Gamepad.bRightTrigger = (buttons & (1<<11)) ? 255 : 0;
     state->Gamepad.bLeftTrigger = *(unsigned char*)(buffer + 17);
