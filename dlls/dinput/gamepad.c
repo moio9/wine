@@ -594,7 +594,7 @@ static BOOL init_object_properties( struct dinput_device *device, UINT index, st
     return DIENUM_CONTINUE;
 }
 
-static HRESULT WINAPI gamepad_create_effect(IDirectInputDevice8W *iface, IDirectInputEffect **out)
+HRESULT gamepad_create_effect(IDirectInputDevice8W *iface, IDirectInputEffect **effect)
 {
     struct gamepad *impl = impl_from_IDirectInputDevice8W(iface);
     gamepad_effect *eff;
@@ -611,7 +611,7 @@ static HRESULT WINAPI gamepad_create_effect(IDirectInputDevice8W *iface, IDirect
     eff->gain        = 10000;
     eff->duration_ms = g_max_rumble_ms;
 
-    *out = &eff->IDirectInputEffect_iface;
+    *effect = &eff->IDirectInputEffect_iface;
     return DI_OK;
 }
 
@@ -1204,7 +1204,7 @@ static void gamepad_destroy( IDirectInputDevice8W *iface )
     close_server_socket(); /* aici e locul potrivit */
 }
 
-static HRESULT WINAPI gamepad_get_effect_info(IDirectInputDevice8W *iface, DIEFFECTINFOW *info, LPCGUID guid)
+static HRESULT gamepad_get_effect_info(IDirectInputDevice8W *iface, DIEFFECTINFOW *info, const GUID *guid)
 {
     struct gamepad *impl = impl_from_IDirectInputDevice8W(iface);
     if (guid) impl->requested_guid = *guid; /* remember for create_effect */
