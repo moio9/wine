@@ -70,18 +70,18 @@ WINE_DEFAULT_DEBUG_CHANNEL(dinput);
 #define IDX_BUTTON_R3 9
 #define IDX_BUTTON_HOME 12
 
-/* Config runtime (setabilă prin env) */
+/* Runtime config (settable via env) */
 static int   g_server_port    = 4601;
 static int   g_client_port    = 4600;
-static DWORD g_timeout_ms     = 2;      /* ~500 Hz implicit */
+static DWORD g_timeout_ms     = 2;      /* ~500 Hz default */
 static BOOL  g_device_enable  = TRUE;
-static BOOL  g_ff_supported   = TRUE;   /* mutată aici să poată fi setată din env */
+static BOOL  g_ff_supported   = TRUE;   /* moved here to be settable from env */
 static USHORT g_max_rumble_ms = 800;
-static char  g_name_override[128];      /* "" = nu override */
+static char  g_name_override[128];      /* "" = no override */
 
 /* mapper & input type override */
 static BOOL  g_mapper_forced      = FALSE;
-static char  g_mapper_forced_val  = FLAG_DINPUT_MAPPER_XINPUT; /* default rămâne xinput */
+static char  g_mapper_forced_val  = FLAG_DINPUT_MAPPER_XINPUT; /* default remains xinput */
 static BOOL  g_input_forced       = FALSE;
 static char  g_input_forced_val   = 0;  /* FLAG_INPUT_TYPE_* */
 
@@ -122,7 +122,7 @@ typedef struct gamepad_effect {
 } gamepad_effect;
 
 
-/* forward decl pentru toate metodele eff_* (ca vtbl-ul să aibă prototipuri) */
+/* forward decl for all eff_* methods (so that the vtbl has prototypes) */
 static HRESULT WINAPI eff_QueryInterface(IDirectInputEffect*, REFIID, void**);
 static ULONG   WINAPI eff_AddRef(IDirectInputEffect*);
 static ULONG   WINAPI eff_Release(IDirectInputEffect*);
@@ -137,14 +137,14 @@ static HRESULT WINAPI eff_Download(IDirectInputEffect*);
 static HRESULT WINAPI eff_Unload(IDirectInputEffect*);
 static HRESULT WINAPI eff_Escape(IDirectInputEffect*, LPDIEFFESCAPE);
 
-/* forward decl pentru vtbl (ca să poți folosi &gamepad_effect_vtbl în create_effect) */
+/* forward decl for vtbl (so you can use &gamepad_effect_vtbl in create_effect) */
 static const IDirectInputEffectVtbl gamepad_effect_vtbl;
 
 static const struct dinput_device_vtbl gamepad_vtbl;
 static SOCKET server_sock = INVALID_SOCKET;
 static BOOL winsock_loaded = FALSE;
 static int connected_gamepad_id = 0;
-static char input_type = FLAG_DINPUT_MAPPER_XINPUT; /* poate fi forțat din env */
+static char input_type = FLAG_DINPUT_MAPPER_XINPUT; /* can be forced from env */
 
 
 static inline struct gamepad *impl_from_IDirectInputDevice8W( IDirectInputDevice8W *iface )
@@ -167,7 +167,7 @@ static void close_server_socket( void )
     }    
 }
 
-/* helper: citire int din env cu fallback */
+/* helper: read int from env with fallback */
 static int env_to_int(const char *key, int defv)
 {
     const char *v = getenv(key);
@@ -175,14 +175,14 @@ static int env_to_int(const char *key, int defv)
     return atoi(v);
 }
 
-/* lower-case helper minimal (doar pentru mici comparații) */
+/* minimal lower-case helper (only for small comparisons) */
 static void tolower_inplace(char *s)
 {
     if (!s) return;
     for (; *s; ++s) if (*s >= 'A' && *s <= 'Z') *s = (char)(*s - 'A' + 'a');
 }
 
-/* Încarcă setările din env. Apelată devreme (în create_device). */
+/* Load settings from env. Called early (in create_device). */
 static void load_env_config(void)
 {
     const char *v;
@@ -193,7 +193,7 @@ static void load_env_config(void)
     g_timeout_ms     = (DWORD)env_to_int("DINPUT_HZ", 0);
     g_selftest_rumble = env_to_int("DINPUT_SELFTEST_RUMBLE", 0) ? TRUE : FALSE;
     if (g_timeout_ms) {
-        /* DINPUT_HZ = frecvență; convertim la timeout ms = max(1, 1000/HZ) */
+        /* DINPUT_HZ = frequency; convert to timeout ms = max(1, 1000/HZ) */
         if (g_timeout_ms <= 0) g_timeout_ms = 2;
         else {
             DWORD hz = g_timeout_ms;
@@ -207,7 +207,7 @@ static void load_env_config(void)
     g_max_rumble_ms  = (USHORT)env_to_int("DINPUT_MAX_RUMBLE_MS", 800);
     g_ff_supported   = env_to_int("DINPUT_FORCEFEEDBACK", 1) ? TRUE : FALSE;
 
-    /* nume override */
+    /* name override */
     v = getenv("DINPUT_GAMEPAD_NAME");
     if (v && *v) {
         lstrcpynA(g_name_override, v, sizeof(g_name_override));
@@ -222,7 +222,7 @@ static void load_env_config(void)
         else if (!strcmp(tmp, "xinput")) { g_mapper_forced = TRUE; g_mapper_forced_val = FLAG_DINPUT_MAPPER_XINPUT; }
     }
 
-    /* input type override (xinput/dinput – afectează FLAG_INPUT_TYPE_*) */
+    /* input type override (xinput/dinput – affects FLAG_INPUT_TYPE_*) */
     v = getenv("DINPUT_GAMEPAD_INPUTTYPE");
     if (v && *v) {
         char tmp[32]; lstrcpynA(tmp, v, sizeof(tmp));
@@ -238,7 +238,7 @@ static BOOL create_server_socket( void )
     struct sockaddr_in server_addr;
     const UINT reuse_addr = 1;
     int res;
-    int timeout; /* C89: declare before any statements */
+    int timeout;
 
     close_server_socket();
 
@@ -294,7 +294,7 @@ static BOOL get_gamepad_request( BOOL notify, char* gamepad_name )
     connected_gamepad_id = gamepad_id;
     input_type = buffer[5];
     if (g_input_forced) {
-        /* păstrăm și mapper bits existenți, dar suprascriem doar tipul */
+        /* we keep the existing mapper bits, but only overwrite the type */
         input_type &= ~(FLAG_INPUT_TYPE_XINPUT | FLAG_INPUT_TYPE_DINPUT);
         input_type |= g_input_forced_val;
     }
@@ -365,6 +365,9 @@ static LONG scale_axis_value( LONG value, struct object_properties *properties )
     return phy_min + MulDiv( value - log_min, phy_max - phy_min, log_max - log_min );
 }
 
+static const unsigned char map_x_standard[12] = {1,2,0,3,4,5,6,7,8,9,10,11};
+static const unsigned char map_x_xinput[11] = {0,1,2,3,4,5,7,6,8,9,10};
+
 static void gamepad_handle_input( IDirectInputDevice8W *iface, short thumb_lx, short thumb_ly, short thumb_rx, short thumb_ry, unsigned char thumb_lz, unsigned char thumb_rz, short buttons, char dpad ) 
 {
     int i, j, index;
@@ -419,21 +422,7 @@ static void gamepad_handle_input( IDirectInputDevice8W *iface, short thumb_lx, s
             impl->state.buttons = buttons;
             for (i = 0, j = 0; i < 12; i++)
             {
-                switch (i)
-                {
-                case IDX_BUTTON_A: j = 1; break;
-                case IDX_BUTTON_B: j = 2; break;
-                case IDX_BUTTON_X: j = 0; break;
-                case IDX_BUTTON_Y: j = 3; break;
-                case IDX_BUTTON_L1: j = 4; break;
-                case IDX_BUTTON_R1: j = 5; break;
-                case IDX_BUTTON_L2: j = 6; break;
-                case IDX_BUTTON_R2: j = 7; break;
-                case IDX_BUTTON_SELECT: j = 8; break;
-                case IDX_BUTTON_START: j = 9; break;
-                case IDX_BUTTON_L3: j = 10; break;
-                case IDX_BUTTON_R3: j = 11; break;                
-                }
+                j = map_x_standard[i];
                 
                 state->rgbButtons[j] = (buttons & (1<<i)) ? 0x80 : 0x00;
                 index = dinput_device_object_index_from_id( iface, DIDFT_BUTTON | DIDFT_MAKEINSTANCE( j ) );
@@ -453,8 +442,7 @@ static void gamepad_handle_input( IDirectInputDevice8W *iface, short thumb_lx, s
     }
     else if (input_type & FLAG_DINPUT_MAPPER_XINPUT)
     {
-    	static const unsigned char map_x[11] = {0,1,2,3,4,5,7,6,8,9,10};
-    	 j = map_x[i];
+    	 j = map_x_xinput[i];
         if (thumb_lx != impl->state.thumb_lx) 
         {
             impl->state.thumb_lx = thumb_lx;
@@ -511,12 +499,11 @@ static void gamepad_handle_input( IDirectInputDevice8W *iface, short thumb_lx, s
         
     if (buttons != impl->state.buttons)
     {
-        static const unsigned char map_x[10] = {0,1,2,3,4,5,7,6,8,9}; /* swap START(7) <-> BACK(6) */
         impl->state.buttons = buttons;
 
         for (i = 0; i < 10; i++)
         {
-            j = map_x[i];
+            j = map_x_xinput[i];
             state->rgbButtons[j] = (buttons & (1 << i)) ? 0x80 : 0x00;
             index = dinput_device_object_index_from_id( iface, DIDFT_BUTTON | DIDFT_MAKEINSTANCE(j) );
             queue_event( iface, index, state->rgbButtons[j], time, seq );
@@ -698,7 +685,7 @@ static HRESULT gamepad_acquire(IDirectInputDevice8W *iface)
     if (server_sock == INVALID_SOCKET && !create_server_socket()) return DIERR_INPUTLOST;
     if (!get_gamepad_request(TRUE, NULL)) return DIERR_INPUTLOST;
 
-    /* snapshot inițial (centrat) ca să miște joy.cpl imediat */
+    /* initial snapshot (centered) to move joy.cpl immediately */
     gamepad_handle_input( iface, 0, 0, 0, 0, 0, 0, 0, -1 );
 
     SetEvent(impl->base.read_event);
@@ -720,7 +707,7 @@ static HRESULT gamepad_unacquire( IDirectInputDevice8W *iface )
 
     release_gamepad_request();
     send_rumble_request(1111, 1000, 1000);
-    /* NU închide socketul aici – UI face Unacquire/Acquire la schimbarea coop level */
+    /* DO NOT close the socket here – the UI does Unacquire/Acquire on coop level change */
     // close_server_socket();
     return DI_OK;
 }
@@ -745,6 +732,9 @@ static BOOL try_enum_object( struct dinput_device *impl, const DIPROPHEADER *fil
     return DIENUM_CONTINUE;
 }
 
+static DIDEVICEOBJECTINSTANCEW instances_standard[17];
+static DIDEVICEOBJECTINSTANCEW instances_xinput[16];
+
 static void get_device_objects( int *instance_count, DIDEVICEOBJECTINSTANCEW **out ) 
 {
     int i, index = 0;
@@ -754,137 +744,134 @@ static void get_device_objects( int *instance_count, DIDEVICEOBJECTINSTANCEW **o
 
     if (input_type & FLAG_DINPUT_MAPPER_STANDARD) 
     {
-   	static DIDEVICEOBJECTINSTANCEW instances[17];
- 	memset(instances, 0, sizeof(instances));
+   	memset(instances_standard, 0, sizeof(instances_standard));
   	*instance_count = 17;
         
-        instances[index].guidType = GUID_XAxis;
-        instances[index].dwOfs = DIJOFS_X;
-        instances[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 0 );
-        instances[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
-        swprintf( instances[index].tszName, MAX_PATH, L"X Axis" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_X;
+        instances_standard[index].guidType = GUID_XAxis;
+        instances_standard[index].dwOfs = DIJOFS_X;
+        instances_standard[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 0 );
+        instances_standard[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
+        swprintf( instances_standard[index].tszName, MAX_PATH, L"X Axis" );
+        instances_standard[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_standard[index].wUsage = HID_USAGE_GENERIC_X;
         index++;
         
-        instances[index].guidType = GUID_YAxis;
-        instances[index].dwOfs = DIJOFS_Y;
-        instances[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 1 );
-        instances[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
-        swprintf( instances[index].tszName, MAX_PATH, L"Y Axis" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_Y;    
+        instances_standard[index].guidType = GUID_YAxis;
+        instances_standard[index].dwOfs = DIJOFS_Y;
+        instances_standard[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 1 );
+        instances_standard[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
+        swprintf( instances_standard[index].tszName, MAX_PATH, L"Y Axis" );
+        instances_standard[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_standard[index].wUsage = HID_USAGE_GENERIC_Y;    
         index++;
         
-        instances[index].guidType = GUID_ZAxis;
-        instances[index].dwOfs = DIJOFS_Z;
-        instances[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 2 );
-        instances[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
-        swprintf( instances[index].tszName, MAX_PATH, L"Z Axis" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_Z;    
+        instances_standard[index].guidType = GUID_ZAxis;
+        instances_standard[index].dwOfs = DIJOFS_Z;
+        instances_standard[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 2 );
+        instances_standard[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
+        swprintf( instances_standard[index].tszName, MAX_PATH, L"Z Axis" );
+        instances_standard[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_standard[index].wUsage = HID_USAGE_GENERIC_Z;    
         index++;    
 
-        instances[index].guidType = GUID_RzAxis;
-        instances[index].dwOfs = DIJOFS_RZ;
-        instances[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 3 );
-        instances[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
-        swprintf( instances[index].tszName, MAX_PATH, L"Rz Axis" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_RZ;    
+        instances_standard[index].guidType = GUID_RzAxis;
+        instances_standard[index].dwOfs = DIJOFS_RZ;
+        instances_standard[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 3 );
+        instances_standard[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
+        swprintf( instances_standard[index].tszName, MAX_PATH, L"Rz Axis" );
+        instances_standard[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_standard[index].wUsage = HID_USAGE_GENERIC_RZ;    
         index++;
         
         for (i = 0; i < 12; i++) 
         {
-            instances[index].guidType = GUID_Button,
-            instances[index].dwOfs = DIJOFS_BUTTON( i ),
-            instances[index].dwType = DIDFT_BUTTON | DIDFT_MAKEINSTANCE( i ),
-            swprintf( instances[index].tszName, MAX_PATH, L"Button %d", i );
-            instances[index].wUsagePage = HID_USAGE_PAGE_BUTTON;
-            instances[index].wUsage = i + 1;
+            instances_standard[index].guidType = GUID_Button,
+            instances_standard[index].dwOfs = DIJOFS_BUTTON( i ),
+            instances_standard[index].dwType = DIDFT_BUTTON | DIDFT_MAKEINSTANCE( i ),
+            swprintf( instances_standard[index].tszName, MAX_PATH, L"Button %d", i );
+            instances_standard[index].wUsagePage = HID_USAGE_PAGE_BUTTON;
+            instances_standard[index].wUsage = i + 1;
             index++;
         }
         
-        instances[index].guidType = GUID_POV;
-        instances[index].dwOfs = DIJOFS_POV( 0 );
-        instances[index].dwType = DIDFT_POV | DIDFT_MAKEINSTANCE( 0 );
-        swprintf( instances[index].tszName, MAX_PATH, L"POV" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_HATSWITCH;
+        instances_standard[index].guidType = GUID_POV;
+        instances_standard[index].dwOfs = DIJOFS_POV( 0 );
+        instances_standard[index].dwType = DIDFT_POV | DIDFT_MAKEINSTANCE( 0 );
+        swprintf( instances_standard[index].tszName, MAX_PATH, L"POV" );
+        instances_standard[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_standard[index].wUsage = HID_USAGE_GENERIC_HATSWITCH;
         
-        *out = instances;
+        *out = instances_standard;
     }
     else if (input_type & FLAG_DINPUT_MAPPER_XINPUT) 
     {
-        static DIDEVICEOBJECTINSTANCEW instances[16];
-
-        memset(instances, 0, sizeof(instances));
+        memset(instances_xinput, 0, sizeof(instances_xinput));
         *instance_count = 16;
         
-        instances[index].guidType = GUID_XAxis;
-        instances[index].dwOfs = DIJOFS_X;
-        instances[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 0 );
-        instances[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
-        swprintf( instances[index].tszName, MAX_PATH, L"X Axis" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_X;
+        instances_xinput[index].guidType = GUID_XAxis;
+        instances_xinput[index].dwOfs = DIJOFS_X;
+        instances_xinput[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 0 );
+        instances_xinput[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
+        swprintf( instances_xinput[index].tszName, MAX_PATH, L"X Axis" );
+        instances_xinput[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_xinput[index].wUsage = HID_USAGE_GENERIC_X;
         index++;
         
-        instances[index].guidType = GUID_YAxis;
-        instances[index].dwOfs = DIJOFS_Y;
-        instances[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 1 );
-        instances[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
-        swprintf( instances[index].tszName, MAX_PATH, L"Y Axis" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_Y;
+        instances_xinput[index].guidType = GUID_YAxis;
+        instances_xinput[index].dwOfs = DIJOFS_Y;
+        instances_xinput[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 1 );
+        instances_xinput[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
+        swprintf( instances_xinput[index].tszName, MAX_PATH, L"Y Axis" );
+        instances_xinput[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_xinput[index].wUsage = HID_USAGE_GENERIC_Y;
         index++;
         
-        instances[index].guidType = GUID_ZAxis;
-        instances[index].dwOfs = DIJOFS_Z;
-        instances[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 2 );
-        instances[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
-        swprintf( instances[index].tszName, MAX_PATH, L"Z Axis" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_Z;
+        instances_xinput[index].guidType = GUID_ZAxis;
+        instances_xinput[index].dwOfs = DIJOFS_Z;
+        instances_xinput[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 2 );
+        instances_xinput[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
+        swprintf( instances_xinput[index].tszName, MAX_PATH, L"Z Axis" );
+        instances_xinput[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_xinput[index].wUsage = HID_USAGE_GENERIC_Z;
         index++;
 
-        instances[index].guidType = GUID_RxAxis;
-        instances[index].dwOfs = DIJOFS_RX;
-        instances[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 3 );
-        instances[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
-        swprintf( instances[index].tszName, MAX_PATH, L"Rx Axis" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_RX;
+        instances_xinput[index].guidType = GUID_RxAxis;
+        instances_xinput[index].dwOfs = DIJOFS_RX;
+        instances_xinput[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 3 );
+        instances_xinput[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
+        swprintf( instances_xinput[index].tszName, MAX_PATH, L"Rx Axis" );
+        instances_xinput[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_xinput[index].wUsage = HID_USAGE_GENERIC_RX;
         index++;
 
-        instances[index].guidType = GUID_RyAxis;
-        instances[index].dwOfs = DIJOFS_RY;
-        instances[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 4 );
-        instances[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
-        swprintf( instances[index].tszName, MAX_PATH, L"Ry Axis" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_RY;    
+        instances_xinput[index].guidType = GUID_RyAxis;
+        instances_xinput[index].dwOfs = DIJOFS_RY;
+        instances_xinput[index].dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 4 );
+        instances_xinput[index].dwFlags = DIDOI_ASPECTPOSITION | DIDOI_FFACTUATOR;
+        swprintf( instances_xinput[index].tszName, MAX_PATH, L"Ry Axis" );
+        instances_xinput[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_xinput[index].wUsage = HID_USAGE_GENERIC_RY;    
         index++;
         
         for (i = 0; i < 10; i++) 
         {
-            instances[index].guidType = GUID_Button,
-            instances[index].dwOfs = DIJOFS_BUTTON( i ),
-            instances[index].dwType = DIDFT_BUTTON | DIDFT_MAKEINSTANCE( i ),
-            swprintf( instances[index].tszName, MAX_PATH, L"Button %d", i );
-            instances[index].wUsagePage = HID_USAGE_PAGE_BUTTON;
-            instances[index].wUsage = i + 1;
+            instances_xinput[index].guidType = GUID_Button,
+            instances_xinput[index].dwOfs = DIJOFS_BUTTON( i ),
+            instances_xinput[index].dwType = DIDFT_BUTTON | DIDFT_MAKEINSTANCE( i ),
+            swprintf( instances_xinput[index].tszName, MAX_PATH, L"Button %d", i );
+            instances_xinput[index].wUsagePage = HID_USAGE_PAGE_BUTTON;
+            instances_xinput[index].wUsage = i + 1;
             index++;
         }
         
-        instances[index].guidType = GUID_POV;
-        instances[index].dwOfs = DIJOFS_POV( 0 );
-        instances[index].dwType = DIDFT_POV | DIDFT_MAKEINSTANCE( 0 );
-        swprintf( instances[index].tszName, MAX_PATH, L"POV" );
-        instances[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
-        instances[index].wUsage = HID_USAGE_GENERIC_HATSWITCH;
+        instances_xinput[index].guidType = GUID_POV;
+        instances_xinput[index].dwOfs = DIJOFS_POV( 0 );
+        instances_xinput[index].dwType = DIDFT_POV | DIDFT_MAKEINSTANCE( 0 );
+        swprintf( instances_xinput[index].tszName, MAX_PATH, L"POV" );
+        instances_xinput[index].wUsagePage = HID_USAGE_PAGE_GENERIC;
+        instances_xinput[index].wUsage = HID_USAGE_GENERIC_HATSWITCH;
         
-        *out = instances;
+        *out = instances_xinput;
     }
 }
 
@@ -993,7 +980,7 @@ static HRESULT WINAPI eff_GetParameters(IDirectInputEffect *iface, LPDIEFFECT pe
     }
     if (flags & DIEP_GAIN)      peff->dwGain     = eff->gain;
     if (flags & DIEP_DURATION)  peff->dwDuration = eff->duration_ms ? eff->duration_ms * 1000 : INFINITE;
-    /* typespecific: opțional */
+    /* typespecific: optional */
 
     return DI_OK;
 }
@@ -1041,7 +1028,7 @@ static HRESULT WINAPI eff_SetParameters(IDirectInputEffect *iface,
         eff->period_ms = (LONG)(pp->dwPeriod / 1000);
     }
 
-    /* fallback dacă magnitude e 0 */
+    /* fallback if magnitude is 0 */
     if (eff->magnitude == 0)
         eff->magnitude = eff->gain ? eff->gain : 6000;
 
@@ -1051,7 +1038,7 @@ static HRESULT WINAPI eff_SetParameters(IDirectInputEffect *iface,
         effect_apply_to_rumble(eff);
     }
     
-    /* Dacă UI a setat un trigger, emulăm hardware-trigger: pornim imediat */
+    /* If the UI set a trigger, we emulate hardware-trigger: start immediately */
     if (peff->dwTriggerButton != DIEB_NOTRIGGER && !eff->running) {
         eff->running = TRUE;
         effect_apply_to_rumble(eff);
@@ -1063,7 +1050,7 @@ static HRESULT WINAPI eff_SetParameters(IDirectInputEffect *iface,
 static HRESULT WINAPI eff_Start(IDirectInputEffect *iface, DWORD iterations, DWORD flags)
 {
     gamepad_effect *eff = impl_from_IDirectInputEffect(iface);
-    if (eff->magnitude == 0) eff->magnitude = 5000; /* fallback dacă UI nu trimite magnitude */
+    if (eff->magnitude == 0) eff->magnitude = 5000; /* fallback if UI doesn't send magnitude */
     eff->running = TRUE;
     effect_apply_to_rumble(eff);
     return DI_OK;
@@ -1141,7 +1128,6 @@ static HRESULT gamepad_get_property( IDirectInputDevice8W *iface, DWORD property
     return DIERR_UNSUPPORTED;
 }
 
-/* Single global vtbl (not inside a function) */
 static const IDirectInputEffectVtbl gamepad_effect_vtbl = {
     eff_QueryInterface, eff_AddRef, eff_Release, eff_Initialize,
     eff_GetEffectGuid,  eff_GetParameters, eff_SetParameters,
@@ -1152,19 +1138,19 @@ static const IDirectInputEffectVtbl gamepad_effect_vtbl = {
 typedef BOOL (CALLBACK *LPDIENUMEFFECTSCALLBACKW)(LPCDIEFFECTINFOW, LPVOID);
 
 
+static const DIPROPHEADER filter = {
+    .dwSize = sizeof(filter),
+    .dwHeaderSize = sizeof(filter),
+    .dwHow = DIPH_DEVICE,
+};
+
 HRESULT gamepad_create_device( struct dinput *dinput, const GUID *guid, IDirectInputDevice8W **out )
 {
-    static const DIPROPHEADER filter =
-    {
-        .dwSize = sizeof(filter),
-        .dwHeaderSize = sizeof(filter),
-        .dwHow = DIPH_DEVICE,
-    };
     struct gamepad *impl;
     HRESULT hr;
 
     *out = NULL;
-    /* Încarcă env la început */
+    /* Load env at the beginning */
     load_env_config();
 
     if (!g_device_enable) return DIERR_DEVICENOTREG;
@@ -1201,7 +1187,7 @@ static void gamepad_destroy( IDirectInputDevice8W *iface )
     struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
     if (impl->base.read_event) CloseHandle( impl->base.read_event );
     release_gamepad_request();
-    close_server_socket(); /* aici e locul potrivit */
+    close_server_socket();
 }
 
 static HRESULT gamepad_get_effect_info(IDirectInputDevice8W *iface, DIEFFECTINFOW *info, const GUID *guid)
@@ -1241,7 +1227,7 @@ static HRESULT gamepad_send_ff_command(IDirectInputDevice8W *iface, DWORD cmd, B
     switch (cmd)
     {
     case DISFFC_SETACTUATORSON:
-        if (connected_gamepad_id) send_rumble_request(0, 0, 50); /* ACK simbolic */
+        if (connected_gamepad_id) send_rumble_request(0, 0, 50); /* symbolic ACK */
         break;
     case DISFFC_SETACTUATORSOFF:
     case DISFFC_STOPALL:
@@ -1250,7 +1236,6 @@ static HRESULT gamepad_send_ff_command(IDirectInputDevice8W *iface, DWORD cmd, B
         send_rumble_request(0, 0, 100);
         break;
     case DISFFC_CONTINUE:
-        /* no-op; efectele tale pornesc din Start/SetParameters */
         break;
     default:
         break;
@@ -1267,14 +1252,13 @@ static HRESULT gamepad_send_device_gain( IDirectInputDevice8W *iface, LONG devic
 static HRESULT gamepad_enum_created_effect_objects( IDirectInputDevice8W *iface,
     LPDIENUMCREATEDEFFECTOBJECTSCALLBACK cb, void *ctx, DWORD flags )
 {
-    /* Nu menținem o listă; dacă vrei, poți ține un list<gamepad_effect*> și să-i dai callback. */
     return DI_OK;
 }
 
 static const struct dinput_device_vtbl gamepad_vtbl =
 {
     /* destroy */                   gamepad_destroy,
-    /* poll */                      gamepad_poll,      // <<< aici
+    /* poll */                      gamepad_poll,  
     /* read */                      gamepad_read,
     /* acquire */                   gamepad_acquire,
     /* unacquire */                 gamepad_unacquire,

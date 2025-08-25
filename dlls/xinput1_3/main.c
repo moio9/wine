@@ -103,17 +103,17 @@ static SOCKET server_sock = INVALID_SOCKET;
 static BOOL winsock_loaded = FALSE;
 static char xinput_min_index = 3;
 
-static char   cfg_bind_ip[16]   = "127.0.0.1";   /* unde ascultă DLL (recv) */
-static char   cfg_peer_ip[16] = "127.0.0.1";
-static USHORT cfg_client_port   = CLIENT_PORT;   /* unde TRIMITE DLL -> python */
-static USHORT cfg_server_port   = SERVER_PORT;   /* unde ASCULTĂ DLL (recv)   */
+static char   cfg_bind_ip[16]   = "127.0.0.1";   /* where the DLL listens (recv) */
+static char   cfg_peer_ip[16] = "127.0.0.1";   /* where the DLL sends data to the python script */
+static USHORT cfg_client_port   = CLIENT_PORT;
+static USHORT cfg_server_port   = SERVER_PORT;   /* where the DLL listens (recv)   */
 static unsigned int cfg_poll_hz = 100; 
 static WORD   cfg_max_rumble_ms = 500;
 static int    cfg_gamepad_id = 1;
 static BOOL   cfg_enabled_default = TRUE;
 
 static BOOL  g_enabled_all = TRUE;         /* XInputEnable(TRUE/FALSE) */
-static DWORD g_enabled_mask = 0xFFFFFFFF;  /* bitmask pe ID-uri (1..32) */
+static DWORD g_enabled_mask = 0xFFFFFFFF;  /* bitmask for IDs (1..32) */
 
 static inline DWORD id_bit(int id)
 {
@@ -140,7 +140,7 @@ static BOOL env_bool(const char *name, BOOL defval)
 
 static void controller_cs_init(void)
 {
-    /* doar primul thread care schimbă 0->1 execută InitializeCriticalSection */
+    /* only the first thread that changes 0->1 executes InitializeCriticalSection */
     if (InterlockedCompareExchange(&controller_cs_inited, 1, 0) == 0)
         InitializeCriticalSection(&controller.crit);
 }
@@ -214,8 +214,8 @@ static void get_gamepad_request(void)
 {
     char buffer[BUFFER_SIZE];
     struct sockaddr_in client_addr;
-    int id;                    /* <-- declară AICI, înainte de cod */
-    int nbytes;                /* dacă vrei să verifici sendto(...) */
+    int id;                    /* <-- declare HERE, before the code */
+    int nbytes;                /* if you want to check sendto(...) */
 
     memset(buffer, 0, sizeof(buffer));
     memset(&client_addr, 0, sizeof(client_addr));
@@ -226,12 +226,12 @@ static void get_gamepad_request(void)
 
     buffer[0] = REQUEST_CODE_GET_GAMEPAD;
     buffer[1] = 1;  /* num (dummy) */
-    id = cfg_gamepad_id;                      /* setează */
-    memcpy(buffer + 2, &id, sizeof(id));      /* copiază LE pe Windows */
+    id = cfg_gamepad_id;                      /* set */
+    memcpy(buffer + 2, &id, sizeof(id));      /* copy LE on Windows */
 
     nbytes = sendto(server_sock, buffer, BUFFER_SIZE, 0,
                     (struct sockaddr*)&client_addr, sizeof(client_addr));
-    (void)nbytes;  /* ca să scapi de warning dacă nu-l folosești */
+    (void)nbytes;  /* to get rid of the warning if you don't use it */
 }
 
 static void release_gamepad_request(void)
@@ -279,13 +279,13 @@ static DWORD parse_enabled_ids_from_env(void)
 
     len = GetEnvironmentVariableA("XINPUT_IDS", buf, sizeof(buf));
     if (!len || len >= sizeof(buf))
-        return 0xFFFFFFFF; /* default: toate pornite */
+        return 0xFFFFFFFF; /* default: all enabled */
 
     mask = 0;
     ctx = NULL;
 
 #if defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR)
-    /* ai strtok_s? atunci folosește-l */
+    /* have strtok_s? then use it */
     tok = strtok_s(buf, " ,;:", &ctx);
     while (tok)
     {
@@ -294,7 +294,7 @@ static DWORD parse_enabled_ids_from_env(void)
         tok = strtok_s(NULL, " ,;:", &ctx);
     }
 #else
-    /* fallback portabil */
+    /* portable fallback */
     tok = strtok(buf, " ,;:");
     while (tok)
     {
@@ -304,7 +304,7 @@ static DWORD parse_enabled_ids_from_env(void)
     }
 #endif
 
-    return mask ? mask : 0; /* dacă lista e goală => nimic permis */
+    return mask ? mask : 0; /* if the list is empty => nothing is allowed */
 }
 
 static void controller_destroy(void)
@@ -320,7 +320,7 @@ static void controller_destroy(void)
         close_server_socket();
         LeaveCriticalSection(&controller.crit);
 
-        /* doar dacă era inițializat => dărâmăm CS și resetăm flag-ul */
+        /* only if it was initialized => we destroy the CS and reset the flag */
         if (InterlockedCompareExchange(&controller_cs_inited, 0, 1) == 1)
             DeleteCriticalSection(&controller.crit);
     }
@@ -421,9 +421,9 @@ static void send_rumble_request(WORD left, WORD right, WORD duration_ms)
     buf[1] = 1;                       /* num_gamepads */
     gamepad_id = (controller.id > 0) ? controller.id : 1;
     *(int*)(buf + 2)  = gamepad_id;        /* id LE */
-    *(unsigned short*)(buf + 6)  = left;   /* left  LE */
-    *(unsigned short*)(buf + 8)  = right;  /* right LE */
-    *(unsigned short*)(buf + 10) = duration_ms ? duration_ms : 100; /* dur LE */
+    *(unsigned short*)(buf + 6)  = left * 1000.0;   /* left  LE */
+    *(unsigned short*)(buf + 8)  = right * 1000.0;  /* right LE */
+    *(unsigned short*)(buf + 10) = duration_ms * 100 ? duration_ms : 100; /* dur LE */
 
     memset(&cli, 0, sizeof(cli));
     cli.sin_family      = AF_INET;
@@ -479,7 +479,7 @@ static DWORD WINAPI controller_read_thread_proc(void *param) {
 
 	if (input_type & FLAG_INPUT_TYPE_XINPUT) {
 	    controller.id = gamepad_id;
-	    /* opțional: dacă vrei să fixezi complet ID-ul, sincronizează-l */
+	    /* optional: if you want to completely fix the ID, synchronize it */
 	    cfg_gamepad_id = gamepad_id;
 	    controller.connected = (gamepad_id > 0);
 	} else {
@@ -498,11 +498,10 @@ static DWORD WINAPI controller_read_thread_proc(void *param) {
         else if (buffer[0] == REQUEST_CODE_HELLO_ACK)
 	{
 	    /* layout: [0]=0x02, [1]=maj, [2]=min, [3]=flags, [4..7]=id, [8..9]=max_ms, [10]=enabled */
-	    int ack_id;
 	    BOOL enabled;
 	    WORD maxms;
 
-	    ack_id = *(int*)(buffer + 4);
+	    *(int*)(buffer + 4);
 	    maxms = *(WORD*)(buffer + 8);
 	    enabled = buffer[10] ? TRUE : FALSE;
 
@@ -553,7 +552,7 @@ static void start_read_thread(void)
 static BOOL controller_is_connected(DWORD index)
 {
     BOOL connected;
-    if (!controller_cs_inited) /* încă nu e gata? răspunde conservator */
+    if (!controller_cs_inited) /* not ready yet? respond conservatively */
         return (index == 0) && controller.connected && is_id_enabled(controller.id);
 
     EnterCriticalSection(&controller.crit);
@@ -591,7 +590,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
 	if (n && n < sizeof(v)) {
 	    v[sizeof(v)-1] = '\0';
 	    lstrcpynA(cfg_bind_ip, v, sizeof(cfg_bind_ip));
-	    lstrcpynA(cfg_peer_ip, v, sizeof(cfg_peer_ip)); /* simplu: aceeași */
+	    lstrcpynA(cfg_peer_ip, v, sizeof(cfg_peer_ip)); /* simple: the same */
 	}
 
         /* XINPUT_PORTS = "CLIENT:SERVER" */
@@ -655,10 +654,10 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vib
     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
     if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
 
-    /* clamp & pregătește payload */
+    /* clamp & prepare payload */
     left = vibration ? vibration->wLeftMotorSpeed : 0;
     right = vibration ? vibration->wRightMotorSpeed : 0;
-    dur = cfg_max_rumble_ms; /* durata maximă din ENV, poate fi zero => fără vibrație lungă */
+    dur = cfg_max_rumble_ms; /* maximum duration from ENV, can be zero => no long vibration */
 
     memset(buf, 0, sizeof(buf));
     buf[0] = REQUEST_CODE_SET_RUMBLE;     /* 0x0B */
